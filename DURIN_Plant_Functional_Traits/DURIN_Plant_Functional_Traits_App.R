@@ -38,6 +38,43 @@ ui <- fluidPage(
                      DT::dataTableOutput("contents")
                    )
                  )),
+        # Additional UI code for Scatter Plot tab
+        tabPanel("Scatter Plot",
+                 sidebarLayout(
+                   sidebarPanel(
+                     h3("Data Filter Options"),
+                     selectInput("scatter_project", "Select Overarching Project", choices = c("All", "DURIN", "DroughtNet")),
+                     conditionalPanel(
+                       condition = "input.scatter_project == 'DURIN'",
+                       uiOutput("scatter_durin_explanatory_vars")
+                     ),
+                     conditionalPanel(
+                       condition = "input.scatter_project == 'DroughtNet'",
+                       uiOutput("scatter_droughtnet_explanatory_vars")
+                     ),
+                     conditionalPanel(
+                       condition = "input.scatter_project == 'All'",
+                       uiOutput("scatter_all_explanatory_vars")
+                     ),
+                     h3("Plotting Options"),
+                     selectInput("scatter_response_var1", "Select Response Variable 1",
+                                 choices = NULL),
+                     selectInput("scatter_response_var2", "Select Response Variable 2",
+                                 choices = NULL),
+                     selectInput("scatter_predictor_var", "Select Predictor Variable",
+                                 choices = NULL),
+                     selectInput("scatter_grouping_var", "Select Grouping Variable (optional)",
+                                 choices = NULL),
+                     radioButtons("scatter_transformation", "Transformation",
+                                  choices = c("None" = "",
+                                              "Natural Log" = "log",
+                                              "Log10" = "log10")),
+                     actionButton("create_scatter_plot", "Create Plot")
+                   ),
+                   mainPanel(
+                     plotOutput("scatter_plot")
+                   )
+                 )),
         tabPanel("Boxplot",
                  sidebarLayout(
                    sidebarPanel(
@@ -90,9 +127,9 @@ server <- function(input, output, session) {
   observe({
     req(unfiltered_data())
 
-    updateSelectInput(session, "box_response_var", choices = names(unfiltered_data())[19:25])
-    updateSelectInput(session, "box_predictor_var", choices = names(unfiltered_data())[c(1:4,6:11)])
-    updateSelectInput(session, "box_grouping_var", choices = c("", names(unfiltered_data())[c(1:4,6:11)]))
+    updateSelectInput(session, "box_response_var", choices = names(unfiltered_data())[18:25])
+    updateSelectInput(session, "box_predictor_var", choices = names(unfiltered_data())[c(5,6,8,9,12,13)])
+    updateSelectInput(session, "box_grouping_var", choices = names(unfiltered_data())[c(5,6,8,9,12,13)])
   })
 
   filtered_data <- reactive({
@@ -128,7 +165,7 @@ server <- function(input, output, session) {
     }
 
     if (!is.null(input$traits)) {
-      data <<- data[, c(names(data)[1:18], input$traits)]
+      data <<- data[, c(names(data)[1:17], input$traits)]
     }
 
     data
@@ -164,7 +201,7 @@ server <- function(input, output, session) {
     req(input$project)
 
     checkboxGroupInput('traits', 'Select Traits',
-                       choices = names(unfiltered_data())[19:25])
+                       choices = names(unfiltered_data())[18:25])
   })
 
   output$box_durin_explanatory_vars <- renderUI({
@@ -244,6 +281,98 @@ server <- function(input, output, session) {
                                         fill = input$box_grouping_var)) +
       geom_boxplot()
   })
+
+  # Additional server code for Scatter Plot tab
+  observe({
+    req(unfiltered_data())
+
+    updateSelectInput(session, "scatter_response_var1", choices = names(unfiltered_data())[18:25])
+    updateSelectInput(session, "scatter_response_var2", choices = names(unfiltered_data())[18:25])
+    updateSelectInput(session, "scatter_predictor_var",  choices = names(unfiltered_data())[c(5,6,8,9,12,13)])
+    updateSelectInput(session, "scatter_grouping_var", choices = names(unfiltered_data())[c(5,6,8,9,12,13)])
+  })
+
+  output$scatter_durin_explanatory_vars <- renderUI({
+    req(input$scatter_project)
+
+    lapply(c('project', 'siteID', 'habitat', 'species', 'leaf_age'), function(var) {
+      checkboxGroupInput(paste0(var, '_scatter_filter'), paste0(var, ' Filter'),
+                         choices = unique(unfiltered_data()[[var]]))
+    })
+  })
+
+  output$scatter_droughtnet_explanatory_vars <- renderUI({
+    req(input$scatter_project)
+
+    lapply(c('project', 'siteID', 'ageClass', 'DroughtTrt', 'species', 'leaf_age'), function(var) {
+      checkboxGroupInput(paste0(var, '_scatter_filter'), paste0(var, ' Filter'),
+                         choices = unique(unfiltered_data()[[var]]))
+    })
+  })
+
+  output$scatter_all_explanatory_vars <- renderUI({
+    req(input$scatter_project)
+
+    lapply(c('project', 'siteID', 'habitat', 'ageClass', 'DroughtTrt', 'species', 'leaf_age'), function(var) {
+      checkboxGroupInput(paste0(var, '_scatter_filter'), paste0(var, ' Filter'),
+                         choices = unique(unfiltered_data()[[var]]))
+    })
+  })
+
+  plot_scatter_data <- eventReactive(input$create_scatter_plot, {
+    data <- unfiltered_data()
+
+    if (input$scatter_project == 'DURIN') {
+      data <- data[!is.na(data$DURIN_plot), ]
+
+      lapply(c('project', 'siteID', 'habitat', 'species', 'leaf_age'), function(var) {
+        input_name <- paste0(var, '_scatter_filter')
+        if (!is.null(input[[input_name]]) && any(input[[input_name]] != '')) {
+          data <<- data[data[[var]] %in% input[[input_name]], ]
+        }
+      })
+    } else if (input$scatter_project == 'DroughtNet') {
+      data <- data[!is.na(data$DroughtNet_plot), ]
+
+      lapply(c('project', 'siteID', 'ageClass', 'DroughtTrt', 'species', 'leaf_age'), function(var) {
+        input_name <- paste0(var, '_scatter_filter')
+        if (!is.null(input[[input_name]]) && any(input[[input_name]] != '')) {
+          data <<- data[data[[var]] %in% input[[input_name]], ]
+        }
+      })
+    } else if (input$scatter_project == 'All') {
+      lapply(c('project', 'siteID', 'habitat', 'ageClass', 'DroughtTrt', 'species', 'leaf_age'), function(var) {
+        input_name <- paste0(var, '_scatter_filter')
+        if (!is.null(input[[input_name]]) && any(input[[input_name]] != '')) {
+          data <<- data[data[[var]] %in% input[[input_name]], ]
+        }
+      })
+    }
+
+
+    response_var1 <- input$scatter_response_var1
+    response_var2 <- input$scatter_response_var2
+    if (input$transformation != '') {
+      response_var1 <- paste0(input$transformation, "(", response_var1, ")")
+      response_var2 <- paste0(input$transformation, "(", response_var2, ")")
+    }
+
+    list(data = data,
+         response_var1 = response_var1,
+         response_var2 =  response_var2)
+  })
+
+  output$scatter_plot <- renderPlot({
+    req(plot_scatter_data())
+
+    ggplot(plot_scatter_data()$data, aes_string(x = plot_scatter_data()$response_var1, y = plot_scatter_data()$response_var2,
+                                                fill = input$scatter_predictor_var)) +
+      geom_point() +
+      facet_wrap(as.formula(paste0("~", input$scatter_grouping_var)))
+  })
+
 }
 
+# Run Shiny App
 shinyApp(ui, server)
+
