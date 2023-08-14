@@ -60,12 +60,13 @@ ui <- fluidPage(
                                  choices = NULL),
                      selectInput("box_predictor_var", "Select Predictor Variable",
                                  choices = NULL),
-                     selectInput("box_grouping_var", "Select Grouping Variable",
+                     selectInput("box_grouping_var", "Select Grouping Variable (optional)",
                                  choices = NULL),
                      radioButtons("transformation", "Transformation",
                                   choices = c("None" = "",
                                               "Natural Log" = "log",
-                                              "Log10" = "log10"))
+                                              "Log10" = "log10")),
+                     actionButton("create_plot", "Create Plot")
                    ),
                    mainPanel(
                      plotOutput("box_plot")
@@ -153,7 +154,6 @@ server <- function(input, output, session) {
 
   output$all_explanatory_vars <- renderUI({
     req(input$project)
-
     lapply(c('project', 'siteID', 'habitat', 'ageClass', 'DroughtTrt', 'species', 'leaf_age'), function(var) {
       checkboxGroupInput(paste0(var, '_filter'), paste0(var, ' Filter'),
                          choices = unique(unfiltered_data()[[var]]))
@@ -198,9 +198,7 @@ server <- function(input, output, session) {
     filtered_data()
   })
 
-  output$box_plot <- renderPlot({
-    req(input$update)
-
+  plot_data <- eventReactive(input$create_plot, {
     data <- unfiltered_data()
 
     if (input$box_project == 'DURIN') {
@@ -235,8 +233,15 @@ server <- function(input, output, session) {
       response_var <- paste0(input$transformation, "(", response_var, ")")
     }
 
-    ggplot(data, aes_string(x = input$box_predictor_var, y = response_var,
-                            fill = input$box_grouping_var)) +
+    list(data = data,
+         response_var = response_var)
+  })
+
+  output$box_plot <- renderPlot({
+    req(plot_data())
+
+    ggplot(plot_data()$data, aes_string(x = input$box_predictor_var, y = plot_data()$response_var,
+                                        fill = input$box_grouping_var)) +
       geom_boxplot()
   })
 }
