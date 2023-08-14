@@ -2,12 +2,17 @@ library(shiny)
 library(lme4)
 library(emmeans)
 
+
+# Create a user interface for the App
 ui <- fluidPage(
   titlePanel("DURIN Project Plant Functional Trait Data Viewer"),
+  # Create a landing page, where we import the .csv file and conduct the filters of the dataset
   sidebarLayout(
     sidebarPanel(
       fileInput("file1", "Upload Plant Functional Trait .csv"),
+      # Provide an option to filter the dataset to our DURIN and DroughtNet Experimental Designs
       selectInput("project", "Select Overarching Project", choices = c("All", "DURIN", "DroughtNet"), selected = "All"),
+      # If DURIN is selected, only display these filtering options
       conditionalPanel(
         condition = "input.project == 'DURIN'",
         checkboxGroupInput("project_filter", "Project", choices = NULL),
@@ -16,6 +21,7 @@ ui <- fluidPage(
         checkboxGroupInput("species_filter", "Species", choices = NULL),
         checkboxGroupInput("leaf_age_filter", "Leaf Age", choices = NULL)
       ),
+      # If DroughtNet is selected, only display these filtering options
       conditionalPanel(
         condition = "input.project == 'DroughtNet'",
         checkboxGroupInput("project_filter", "Project", choices = NULL),
@@ -25,6 +31,7 @@ ui <- fluidPage(
         checkboxGroupInput("species_filter", "Species", choices = NULL),
         checkboxGroupInput("leaf_age_filter", "Leaf Age", choices = NULL)
       ),
+      # If ALL is selected, display a combination of variables from the DURIN and DroughtNet experimental designs
       conditionalPanel(
         condition = "input.project == 'All'",
         checkboxGroupInput("project_filter", "Project", choices = NULL),
@@ -36,13 +43,17 @@ ui <- fluidPage(
         checkboxGroupInput("leaf_age_filter", "Leaf Age", choices = NULL)
       )
     ),
+    # Add welcome text
     mainPanel(
       textOutput("welcome_text"),
+      # Set up tabs for our different data table, data plotting and data analysis actions
       tabsetPanel(
+        # Set up a tab for displaying the data table after our selections have been accounted for
         tabPanel(
           title = 'Data Table',
           tableOutput('data_table')
         ),
+        # Set up a boxplot visualization tab using our filter selections on the main page
         tabPanel(
           title = 'Boxplot',
           selectInput('response', 'Response Variable', c('plant_height', 'bulk_nr_leaves', 'wet_mass_g', 'leaf_thickness_1_mm', 'leaf_thickness_2_mm', 'leaf_thickness_3_mm', 'dry_mass_g', 'stomatal_conductance(gs)', 'spectromery')),
@@ -52,6 +63,7 @@ ui <- fluidPage(
           actionButton('create_boxplot','Create Plot'),
           plotOutput('boxplot')
         ),
+        # Set up a scatterplot visualization tab using our filter selections on the main page
         tabPanel(
           title = 'Scatterplot',
           selectInput('response1','Response Variable 1:', c('plant_height','bulk_nr_leaves','wet_mass_g','leaf_thickness_1_mm','leaf_thickness_2_mm','leaf_thickness_3_mm','dry_mass_g','stomatal_conductance(gs)','spectromery')),
@@ -61,6 +73,7 @@ ui <- fluidPage(
           actionButton('create_scatterplot', 'Create Plot'),
           plotOutput('scatterplot')
         ),
+        # Add a linear mixed effects analysis tab based on our filtering selections on the main page
         tabPanel(
           title = 'Linear Mixed Effects Analysis',
           textAreaInput('formulas', 'Mixed Effects Model Formulas', rows = 5),
@@ -77,21 +90,26 @@ ui <- fluidPage(
   )
 )
 
+
+# Create the server code the controls the UI components
 server <- function(input, output, session) {
   data <- reactive({
     req(input$file1)
     read.csv(input$file1$datapath)
   })
 
+  # Create the welcome text
   output$welcome_text <- renderText({
     "Welcome to the DURIN Project Plant Functional Trait Data Viewer! Here, we can import our cleaned trait data from our OSF account, and do exploratory data visualization."
   })
 
+  # On the main page, set the options for filtering the datasets
   filtered_data <- reactive({
     data <- data()
-
+  # Define as DURIN if there are not NA values in the DURIN_plot column
     if (input$project == "DURIN") {
       data <- data[!is.na(data$DURIN_plot),]
+  # Else, define as DroughtNet if there are no NA's in the DroughtNet_plot column
     } else if (input$project == "DroughtNet") {
       data <- data[!is.na(data$DroughtNet_plot),]
     }
@@ -127,6 +145,7 @@ server <- function(input, output, session) {
     return(data)
   })
 
+  # For key variables: project, siteID, habitat, ageClass, DroughtTrt, species and leaf_age rovide the unique levels within each explanatory factor as section checkboxes.
   observeEvent(data(), {
     updateCheckboxGroupInput(session, "project_filter", choices = unique(data()$project))
     updateCheckboxGroupInput(session, "siteID_filter", choices = unique(data()$siteID))
@@ -137,21 +156,26 @@ server <- function(input, output, session) {
     updateCheckboxGroupInput(session, "leaf_age_filter", choices = unique(data()$leaf_age))
   })
 
+  # Render a table of data based on the selection options chosen from those defined above.
   output$data_table <- renderTable({
     filtered_data()
   })
 
+  # Create the boxplot tab using the filtered data from the main page
   observeEvent(input$create_boxplot,{
     req(filtered_data())
 
+  # Define response, predictor and grouping variables to be used for the plots
     response_var <- input$response
     predictor_var <- input$predictor
     grouping_var <- input$grouping
 
+  # If the user chooses a transformation option, such as log transform, change the figure text
     if (input$transformation == 'log') {
       response_var <- paste0('log(',response_var,')')
       ylab_text <- paste0('log(',input$response,')')
 
+  # Render a boxplot figure using the filtered data and chosen response, predictor and grouping variables. The grouping variable is also used to facet the plots.
       output$boxplot<-renderPlot({
         ggplot(filtered_data(), aes_string(x = predictor_var, y = response_var)) +
           geom_boxplot(aes_string(fill = grouping_var)) +
@@ -169,14 +193,17 @@ server <- function(input, output, session) {
     }
   })
 
+  # The scatterplot graphs using the filtered dataset
   observeEvent(input$create_scatterplot,{
     req(filtered_data())
 
+  # Create the two numeric response variables, and provide options for predictor and grouping variables
     response1_var <- input$response1
     response2_var <- input$response2
     predictor_scatterplot_var <- input$predictor_scatterplot
     grouping_scatterplot_var <- input$grouping_scatterplot
 
+  # Create a scatterplot using the defiend response, predictor and grouping variables.
     output$scatterplot<-renderPlot({
       ggplot(filtered_data(), aes_string(x=response1_var,y=response2_var,color=predictor_scatterplot_var))+
         geom_point()+
@@ -186,20 +213,23 @@ server <- function(input, output, session) {
   })
 
 
+
+  # Install relevant packages within the server code so that they can run.
   library(lme4)
   library(lmerTest)
   library(emmeans)
   library(multcomp)
-  # Server code for Linear Mixed Effects Analysis tab
 
+  # Server code for Linear Mixed Effects Analysis tab, using the filtered dataset
 
   observeEvent(input$run_analysis, {
     req(input$formulas)
     req(filtered_data())
 
     model_formulas <- unlist(strsplit(input$formulas, "\n"))
-
+ # Create a list of the models to populate
     models <- list()
+
 
     for (i in seq_along(model_formulas)) {
       model_formula <- as.formula(model_formulas[i])
