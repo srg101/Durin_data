@@ -1,0 +1,210 @@
+---
+title: "Download Norwegian Meterological Data"
+author: "Sonya R. Geange"
+output: html_notebook
+---
+
+
+
+```{r}
+# Load required libraries
+library(httr)
+library(jsonlite)
+library(tidyverse)
+library(lubridate)
+library(writexl)
+
+# Define the client ID for accessing the frost API
+client_id <- "c4ae80e2-990c-4ad0-b9b7-5564e6541646" # Replace with your client ID
+
+# Define the base URL for the frost API
+base_url <- "https://frost.met.no"
+
+# Define the endpoint for retrieving weather data
+endpoint <- "/observations/v0.jsonld"
+
+# Define the parameters for retrieving weather data
+params <- list(
+  # Date range to retrieve the data for
+  referencetime = "2023-06-01/2023-08-01",
+  # Parameters we wish to download, sourced from elements table <https://frost.met.no/elementtable>
+  elements = "
+  max(air_temperature P1D),
+  min(air_temperature P1D),
+  mean(air_temperature P1D),
+  mean(air_temperature PT1H),
+  max(air_temperature PT1H),
+  min(air_temperature PT1H),
+  max(air_temperature PT10M),
+  mean(air_temperature PT10M),
+  min(air_temperature PT10M),
+  grass_temperature, 
+  max(grass_temperature PT1H),
+  mean(grass_temperature PT1H),
+  min(grass_temperature PT1H),
+  precipitation_amount,
+  mean(surface_downwelling_photosynthetic_radiative_flux_in_air PT1H),
+  max(relative_humidity PT1H),
+  mean(relative_humidity PT1H),
+  min(relative_humidity PT1H),
+  max(relative_humidity PT10M),
+  min(relative_humidity PT10M),
+  mean(relative_humidity PT10M),
+  mean(relative_humidity P1D),
+  min(relative_humidity P1D),
+  max(relative_humidity P1D),
+  mean(water_vapor_partial_pressure_in_air P1D),
+  max(wind_speed P1D),
+  max(wind_speed PT1H),
+  integral_of_excess(mean(air_temperature P1D) P1D 0.0),
+  integral_of_excess(mean(air_temperature P1D) P1D 5.0)",
+  # Replace with the IDs of the weather stations closest to your locations
+  # Lygra: FV57 Mongstad sør observation station
+  # Songdal: Skardsbøfjellet observation station
+  # Sogndal2: Sogndal lufthavn observation station
+  # Tjotta: Tjøtta observation station. Alstahaug, elevation 21 m. Est. in 1984. The station measures temperature, precipitation, and wind speed.
+  # Senja: FV862 Senjahopen observation station. Located in Senja, elevation 20 m. Est. 2014. The station measures temperature
+  # Kautokeino: Guovdageaidnu observation station. Located in Kautokeino, elevation 307 m. The station was established in January 1868. The station measures temperature, precipitation, snow depth, and wind speed. There may be missing data.
+  sources = "
+  SN52555, 
+  SN55720,
+  SN55700,
+  SN76530,
+  SN88628,
+  SN93700", 
+  timeoffsets = "PT0H",
+  timeresolutions = "PT15M"
+)
+
+
+# Retrieve the weather data from the frost API
+response <- GET(url = paste0(base_url, endpoint), query = params, add_headers("accept" = "application/json", "Authorization" = paste("Bearer", client_id)))
+stop_for_status(response)
+weather_data <- content(response, as = "text", encoding = "UTF-8") %>%
+  fromJSON(flatten = TRUE) %>%
+  as_tibble()
+
+# Convert date and time columns to POSIXct format
+weather_data$referenceTime <- ymd_hms(weather_data$referenceTime)
+
+# Reshape the data into a tidy format
+weather_data_tidy <- weather_data %>%
+  pivot_longer(cols = starts_with("observations."), names_to = "element", values_to = "value") %>%
+  mutate(element = str_remove(element, "^observations\\.")) %>%
+  pivot_wider(names_from = element, values_from = value)
+
+# Calculate the mean, max, min, and range of temperatures for each 15-minute period
+weather_summary <- weather_data_tidy %>%
+  mutate(period = floor_date(referenceTime, unit = "15 mins")) %>%
+  group_by(period) %>%
+  summarize(
+    mean_temperature = mean(air_temperature),
+    max_temperature = max(air_temperature),
+    min_temperature = min(air_temperature),
+    range_temperature = max_temperature - min_temperature,
+    total_precipitation = sum(precipitation_amount),
+    mean_PAR = mean(PAR),
+    mean_humidity = mean(humidity),
+    mean_wind_speed = mean(wind_speed),
+    mean_snow_depth = mean(snow_depth)
+  )
+
+# Save the summary data as an .xlsx file
+write_xlsx(weather_summary, "weather_summary.xlsx")
+
+
+
+###############################
+# Attempt 2 Format
+###############################
+# Define andpoint and parameters
+endpoint <- paste0("https://", client_id, "@frost.met.no/observations/v0.jsonld")
+sources <- 'SN52555, SN55720, SN55700, SN76530, SN88628, SN93700'
+elements <- 'max(air_temperature P1D),
+  min(air_temperature P1D),
+  mean(air_temperature P1D),
+  mean(air_temperature PT1H),
+  max(air_temperature PT1H),
+  min(air_temperature PT1H),
+  max(air_temperature PT10M),
+  mean(air_temperature PT10M),
+  min(air_temperature PT10M),
+  grass_temperature, 
+  max(grass_temperature PT1H),
+  mean(grass_temperature PT1H),
+  min(grass_temperature PT1H),'
+referenceTime <- '2023-06-01/2023-08-01'
+# Build the URL to Frost
+url <- paste0(
+    endpoint, "?",
+    "sources=", sources,
+    "&referencetime=", referenceTime,
+    "&elements=", elements
+)
+# Issue an HTTP GET request and extract JSON data
+xs <- try(fromJSON(URLencode(url),flatten=T))
+
+
+# Check if the request worked, print out any errors
+if (class(xs) != 'try-error') {
+    df <- unnest(xs$data)
+    print("Data retrieved from frost.met.no!")
+} else {
+    print("Error: the data retrieval was not successful!")
+}
+
+# Check dataframe
+head(df)
+
+# To make a shorter and more readable table, you can use the code below.
+# These additional columns will be kept
+columns <- c("sourceId","referenceTime","elementId","value","unit","timeOffset")
+df2 <- df[columns]
+# Convert the time value to something R understands in UTC, then shift to CET
+library(lubridate)
+library(hms)
+df2$datetime_UTC <- as.POSIXlt(df2$referenceTime, format="%Y-%m-%dT%H:%M:%OSZ", tz="UTC")
+df2$datetime_CET <- with_tz(df2$datetime_UTC, "CET")
+
+# Add columns for date and time only
+df2$date_CET <- date(df2$datetime_CET)
+# Time only, but midnight doesn't seem to work, weirdly.
+# df2$time_CET <- as_hms(ymd_hms(df2$datetime_CET))
+# This one works better!
+df2$time_CET <- format(df2$datetime_CET,"%H:%M")
+
+# Preview the result
+head(df2)
+
+# Change from tibble to dataframe
+climate_all <- as.data.frame(df2) %>% 
+  # remove unwanted columns
+  select(c(sourceId, datetime_CET, date_CET, time_CET, elementId, value)) 
+
+# Recode the sourceId column to be our sites
+
+
+
+# Dataset for individual temperature metrics
+# Daily air temps at 2m
+daily_air_temps <- climate_all %>% 
+  filter(elementId %in% c("mean(air_temperature P1D)",
+                          "max(air_temperature P1D)",
+                          "min(air_temperature P1D)" ))
+
+  
+  filter(df2, elementId == "mean(air_temperature P1D")
+max_daily_air_temp <- df2 %>% filter(elementId == "max(air_temperature P1D)")
+min_daily_air_temp <- df2 %>% filter(elementId == "min(air_temperature P1D)")
+# Hourly air temps at 2m
+mean_hourly_air_temp <- df2 %>% filter(elementId == "mean(air_temperature PT1H)")
+max_hourly_air_temp <- df2 %>% filter(elementId == "max(air_temperature PT1H)")
+min_hourly_air_temp <- df2 %>% filter(elementId == "min(air_temperature PT1H)")
+# Hourly grass temp (10cm)
+mean_hourly_grass_temp <- df2 %>% filter(elementId == "mean(grass_temperature PT1H)")
+max_hourly_grass_temp <- df2 %>% filter(elementId == "max(grass_temperature PT1H)")
+min_hourly_grass_temp <- df2 %>% filter(elementId == "mean(grass_temperature PT1H)")
+
+
+```
+
