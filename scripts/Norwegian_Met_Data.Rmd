@@ -182,7 +182,15 @@ climate_all <- as.data.frame(df2) %>%
   select(c(sourceId, datetime_CET, date_CET, time_CET, elementId, value)) 
 
 # Recode the sourceId column to be our sites
-
+climate_all %>% 
+   mutate(
+   siteID = recode(sourceId,
+  'SN52555:0' ~ "Lygra", 
+   # SN55720~ "Sogndal_1", # doesn't seem to have records?
+  'SN55700:0' ~ "Sogndal_2",
+  'SN76530:0'~ "Tjotta",
+  'SN88628:0' ~ "Senja",
+  'SN93700:0' ~ "Kautokeino"))
 
 
 # Dataset for individual temperature metrics
