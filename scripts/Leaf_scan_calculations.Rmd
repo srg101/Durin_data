@@ -14,6 +14,7 @@ output: html_notebook
 # devtools::install_github("richardjtelford/LeafArea")
 library(LeafArea)
 library(plyr)
+library(dplyr)
 
 
 #### Function to calculate leaf area
@@ -50,13 +51,14 @@ run.ij(path.imagej = "C:/Users/geang/OneDrive/Documents/ImageJ/ImageJ", set.dire
 # Be sure to adjust the file path directory if required
 # These need to be downloaded from the OSF account. 
 # Note, each site has a folder and several subfolders.
+# Because of how often errors occur, run each folder seperately
 # Some images also required editing, i.e. painting overlapping leaves etc.
 # A default address could be 'raw_data/leaf_scans/DURIN_leaf_scans/
 
 
-list.of.files <- dir(path = paste0("C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Tjotta Leaf Scans/2023.07.06 C3PO/"), pattern = "jpeg|jpg", recursive = TRUE, full.names = TRUE)
-new.folder <- "C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Tjotta Leaf Scans/2023.07.06 C3PO/Temp/" # "raw_data/Temp/"
-output.folder <- "C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Tjotta Leaf Scans/2023.07.06 C3PO/output/" # raw_data/output
+list.of.files <- dir(path = paste0("C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Edited Scans/Edited"), pattern = "jpeg|jpg", recursive = TRUE, full.names = TRUE)
+new.folder <- "C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Edited Scans/Edited/Temp" # "raw_data/Temp/"
+output.folder <- "C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Edited Scans/Edited/output/" # raw_data/output
 
 # Run function
 LeafArea.raw_total <- plyr::ldply(list.of.files, loop.files)
@@ -70,6 +72,6 @@ leaf_area <- LeafArea.raw_total |>
 
 # save data as csv
 dim(LeafArea.raw)
-write.csv(leaf_area, file = "C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Tjotta Leaf Scans/2023.07.06 C3PO/output/leaf_area.csv")
+write.csv(leaf_area, file = "C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Edited Scans/Edited/output/Edited_leaf_area_2023_09_07.csv")
 ```
 
